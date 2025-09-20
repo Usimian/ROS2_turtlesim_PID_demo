@@ -134,10 +134,10 @@ inline void to_flow_style_yaml(
   std::ostream & out)
 {
   out << "{";
-  // member: sucess
+  // member: success
   {
-    out << "sucess: ";
-    rosidl_generator_traits::value_to_yaml(msg.sucess, out);
+    out << "success: ";
+    rosidl_generator_traits::value_to_yaml(msg.success, out);
   }
   out << "}";
 }  // NOLINT(readability/fn_size)
@@ -146,13 +146,13 @@ inline void to_block_style_yaml(
   const GoToPose_Result & msg,
   std::ostream & out, size_t indentation = 0)
 {
-  // member: sucess
+  // member: success
   {
     if (indentation > 0) {
       out << std::string(indentation, ' ');
     }
-    out << "sucess: ";
-    rosidl_generator_traits::value_to_yaml(msg.sucess, out);
+    out << "success: ";
+    rosidl_generator_traits::value_to_yaml(msg.success, out);
     out << "\n";
   }
 }  // NOLINT(readability/fn_size)

@@ -138,14 +138,14 @@ void cpp_node__action__GoToPose_Result__rosidl_typesupport_introspection_c__GoTo
 
 static rosidl_typesupport_introspection_c__MessageMember cpp_node__action__GoToPose_Result__rosidl_typesupport_introspection_c__GoToPose_Result_message_member_array[1] = {
   {
-    "sucess",  // name
+    "success",  // name
     rosidl_typesupport_introspection_c__ROS_TYPE_BOOLEAN,  // type
     0,  // upper bound of string
     NULL,  // members of sub message
     false,  // is array
     0,  // array size
     false,  // is upper bound
-    offsetof(cpp_node__action__GoToPose_Result, sucess),  // bytes offset in struct
+    offsetof(cpp_node__action__GoToPose_Result, success),  // bytes offset in struct
     NULL,  // default value
     NULL,  // size() function pointer
     NULL,  // get_const(index) function pointer

@@ -25,6 +25,12 @@ class Controller_Node(Node):
         self.err_dist = 0
         self.err_theta = 0
 
+        # Initialize PID variables as instance variables
+        self.integral_dist = 0.0
+        self.previous_err_dist = 0.0
+        self.integral_theta = 0.0
+        self.previous_err_theta = 0.0
+
         # Use a ReentrantCallbackGroup to allow concurrent callback execution
         self.callback_group = ReentrantCallbackGroup()
         self.goal_completed = False  # Flag to track goal completion
@@ -61,6 +67,12 @@ class Controller_Node(Node):
         # Update desired position based on goal
         self.desired_x = goal_handle.request.desired_x_pos
         self.desired_y = goal_handle.request.desired_y_pos
+        
+        # Reset PID variables for new goal
+        self.integral_dist = 0.0
+        self.previous_err_dist = 0.0
+        self.integral_theta = 0.0
+        self.previous_err_theta = 0.0
 
         # Subscribe to the pose topic to get feedback on turtle's position
         self.my_pose_sub = self.create_subscription(
@@ -70,7 +82,7 @@ class Controller_Node(Node):
         self.result = GoToPose.Result()
 
         try:
-            # Create a periodic timer to check if the goal is reached
+            # Create a periodic timer to check if the goal is reached (10Hz to prevent oscillations)
             self.goal_timer = self.create_timer(0.1, self.check_goal_reached)
 
             # Spin the node to handle other callbacks while the goal is active
@@ -82,23 +94,43 @@ class Controller_Node(Node):
         except Exception as e:
             # Handle exceptions during goal execution
             self.get_logger().error(f"Error during goal execution: {e}")
-            self.goal_handle.abort()  # Abort the goal
-            self.result.sucess = False
+            try:
+                if hasattr(self, 'goal_handle') and self.goal_handle is not None:
+                    self.goal_handle.abort()  # Abort the goal
+            except Exception as abort_error:
+                self.get_logger().error(f"Failed to abort goal: {abort_error}")
+            self.result.success = False
+            if hasattr(self, 'goal_timer'):
+                self.goal_timer.cancel()
 
         # Return the result object
         return self.result
 
     # Periodic callback to check if the goal is reached
     def check_goal_reached(self):
-        # Check if the position and heading errors are within tolerances
-        if self.err_dist < 0.1 and abs(self.err_theta) < 0.08:
-            self.get_logger().info("Goal reached successfully!")
-            self.result.sucess = True
-            self.goal_handle.succeed()  # Mark the goal as succeeded
-            self.goal_timer.cancel()  # Stop the periodic checks
-            self.goal_completed = True
-        else:
-            self.get_logger().info("Still moving towards the goal...")
+        # Only check if goal is still active (not aborted or cancelled)
+        if hasattr(self, 'goal_handle') and self.goal_handle is not None:
+            # Check if goal was cancelled or aborted externally
+            if self.goal_handle.is_cancel_requested:
+                self.get_logger().info("Goal was cancelled")
+                self.goal_timer.cancel()
+                self.goal_completed = True
+                return
+                
+            # Check if the position and heading errors are within tolerances
+            if self.err_dist < 0.1 and abs(self.err_theta) < 0.08:
+                self.get_logger().info("Goal reached successfully!")
+                self.result.success = True
+                try:
+                    self.goal_handle.succeed()  # Mark the goal as succeeded
+                    self.goal_timer.cancel()  # Stop the periodic checks
+                    self.goal_completed = True
+                except Exception as e:
+                    self.get_logger().error(f"Failed to mark goal as succeeded: {e}")
+                    self.goal_timer.cancel()
+                    self.goal_completed = True
+            else:
+                self.get_logger().info("Still moving towards the goal...")
 
     # Callback to process turtle's pose and compute control commands
     def pose_callback(self, msg: Pose):
@@ -124,27 +156,36 @@ class Controller_Node(Node):
             self.err_theta += 2.0 * math.pi
         
         # PID gains for distance and heading control
-        Kp_dist, Ki_dist, Kd_dist = 0.2, 0.05, 0.02
-        Kp_theta, Ki_theta, Kd_theta = 1.5, 0.18, 0.1
+        # ----------------------------------------------
+        # Fast angular control to match linear speed - turtle can turn quickly to target
+        Kp_dist, Ki_dist, Kd_dist = 1.5, 0.05, 0.005    # Distance control (moderate)
+        Kp_theta, Ki_theta, Kd_theta = 6.0, 0.08, 0.02   # Angular control (MUCH faster)
+        # ----------------------------------------------
 
-        # Initialize integral and derivative terms
-        integral_dist = 0.0
-        previous_err_dist = 0.0
-        integral_theta = 0.0
-        previous_err_theta = 0.0
+        # Update PID integral and derivative terms using instance variables
+        self.integral_dist += self.err_dist
+        derivative_dist = self.err_dist - self.previous_err_dist
+        self.integral_theta += self.err_theta
+        derivative_theta = self.err_theta - self.previous_err_theta
+        
+        # Integral windup protection (clamp integral terms)
+        max_integral_dist = 2.0  # Limit integral contribution
+        max_integral_theta = 1.0
+        self.integral_dist = max(-max_integral_dist, min(max_integral_dist, self.integral_dist))
+        self.integral_theta = max(-max_integral_theta, min(max_integral_theta, self.integral_theta))
 
         # PID control for linear velocity
         if self.err_dist >= 0.1:
-            l_v = Kp_dist * abs(self.err_dist) + Ki_dist * integral_dist + Kd_dist * (self.err_dist - previous_err_dist)
-            previous_err_dist = self.err_dist
+            l_v = Kp_dist * abs(self.err_dist) + Ki_dist * self.integral_dist + Kd_dist * derivative_dist
+            self.previous_err_dist = self.err_dist
         else:
             self.get_logger().info(f"Turtlesim stopping as goal distance is within tolerance")
             l_v = 0.0
 
         # PID control for angular velocity
         if abs(self.err_theta) >= 0.08:
-            a_v = Kp_theta * self.err_theta + Ki_theta * integral_theta + Kd_theta * (self.err_theta - previous_err_theta)
-            previous_err_theta = self.err_theta
+            a_v = Kp_theta * self.err_theta + Ki_theta * self.integral_theta + Kd_theta * derivative_theta
+            self.previous_err_theta = self.err_theta
         else:
             self.get_logger().info(f"Turtlesim stopping as goal heading is within tolerance")
             a_v = 0.0

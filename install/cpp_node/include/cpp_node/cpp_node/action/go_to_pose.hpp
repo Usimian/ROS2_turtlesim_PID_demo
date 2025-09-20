@@ -7,5 +7,6 @@
 #include "cpp_node/action/detail/go_to_pose__struct.hpp"
 #include "cpp_node/action/detail/go_to_pose__builder.hpp"
 #include "cpp_node/action/detail/go_to_pose__traits.hpp"
+#include "cpp_node/action/detail/go_to_pose__type_support.hpp"
 
 #endif  // CPP_NODE__ACTION__GO_TO_POSE_HPP_

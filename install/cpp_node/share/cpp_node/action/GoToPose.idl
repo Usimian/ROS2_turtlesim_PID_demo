@@ -15,7 +15,7 @@ module cpp_node {
     @verbatim (language="comment", text=
       "Result")
     struct GoToPose_Result {
-      boolean sucess;
+      boolean success;
     };
     @verbatim (language="comment", text=
       "Feedback")

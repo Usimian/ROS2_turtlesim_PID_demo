@@ -40,7 +40,7 @@ typedef struct cpp_node__action__GoToPose_Goal__Sequence
 /// Struct defined in action/GoToPose in the package cpp_node.
 typedef struct cpp_node__action__GoToPose_Result
 {
-  bool sucess;
+  bool success;
 } cpp_node__action__GoToPose_Result;
 
 // Struct for a sequence of cpp_node__action__GoToPose_Result.

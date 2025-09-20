@@ -166,7 +166,7 @@ struct GoToPose_Result_
     if (rosidl_runtime_cpp::MessageInitialization::ALL == _init ||
       rosidl_runtime_cpp::MessageInitialization::ZERO == _init)
     {
-      this->sucess = false;
+      this->success = false;
     }
   }
 
@@ -176,20 +176,20 @@ struct GoToPose_Result_
     if (rosidl_runtime_cpp::MessageInitialization::ALL == _init ||
       rosidl_runtime_cpp::MessageInitialization::ZERO == _init)
     {
-      this->sucess = false;
+      this->success = false;
     }
   }
 
   // field types and members
-  using _sucess_type =
+  using _success_type =
     bool;
-  _sucess_type sucess;
+  _success_type success;
 
   // setters for named parameter idiom
-  Type & set__sucess(
+  Type & set__success(
     const bool & _arg)
   {
-    this->sucess = _arg;
+    this->success = _arg;
     return *this;
   }
 
@@ -235,7 +235,7 @@ struct GoToPose_Result_
   // comparison operators
   bool operator==(const GoToPose_Result_ & other) const
   {
-    if (this->sucess != other.sucess) {
+    if (this->success != other.success) {
       return false;
     }
     return true;
