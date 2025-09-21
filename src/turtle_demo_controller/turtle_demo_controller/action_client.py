@@ -71,6 +71,7 @@ class GoToPoseClient(Node):
         
         # Mark goal as completed to trigger new input
         self.goal_completed = True
+
     def feedback_callback(self, feedback_msg):
         # Callback function to handle feedback messages during goal execution
         x_feedback = feedback_msg.feedback.current_x_pos  # Get the current x position from feedback

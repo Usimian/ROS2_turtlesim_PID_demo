@@ -1,214 +1,174 @@
 #!/usr/bin/env python3
 
-# Importing required modules
-import rclpy  # ROS 2 Python client library
-import math  # For mathematical calculations
-from rclpy.node import Node  # Base class for ROS 2 nodes
-from geometry_msgs.msg import Twist  # Message type for velocity commands
-from turtlesim.msg import Pose  # Message type for turtlesim's pose
-from cpp_node.action import GoToPose  # Custom action for GoToPose
-from rclpy.action import ActionServer, GoalResponse  # ROS 2 Action Server utilities
-from rclpy.action.server import ServerGoalHandle  # Goal handle for the action server
-from rclpy.callback_groups import ReentrantCallbackGroup  # To allow concurrent callbacks
+"""
+Simple, robust ROS2 action server for turtle control following best practices.
+Replaces the previous problematic implementation with a clean, working solution.
+"""
 
-# Define the main controller node class
+import rclpy
+from rclpy.node import Node
+from rclpy.action import ActionServer, GoalResponse, CancelResponse
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import ReentrantCallbackGroup
+
+import math
+import time
+from geometry_msgs.msg import Twist
+from turtlesim.msg import Pose
+from cpp_node.action import GoToPose
+
+
 class Controller_Node(Node):
     def __init__(self):
-        super().__init__('turt_controller')  # Initialize the node with a name
-        self.get_logger().info("Node Started")  # Log node initialization
-
-        # Desired position for the turtle
-        self.desired_x = 5.544
-        self.desired_y = 5.544
-
-        # Initialize error variables
-        self.err_dist = 0
-        self.err_theta = 0
-
-        # Initialize PID variables as instance variables
-        self.integral_dist = 0.0
-        self.previous_err_dist = 0.0
-        self.integral_theta = 0.0
-        self.previous_err_theta = 0.0
-
-        # Use a ReentrantCallbackGroup to allow concurrent callback execution
+        super().__init__('turtle_pid_controller')
+        self.get_logger().info("Simple Turtle Controller initialized")
+        
+        # Create callback group for concurrent execution
         self.callback_group = ReentrantCallbackGroup()
-        self.goal_completed = False  # Flag to track goal completion
-
-        # Publisher for sending velocity commands
-        self.my_vel_command = self.create_publisher(Twist, "/turtle1/cmd_vel", 10)
-
-        # Action server setup for the GoToPose action
+        
+        # Publishers and subscribers
+        self.cmd_vel_pub = self.create_publisher(Twist, '/turtle1/cmd_vel', 10)
+        self.pose_sub = self.create_subscription(
+            Pose, '/turtle1/pose', self.pose_callback, 10, 
+            callback_group=self.callback_group)
+        
+        # Action server
         self._action_server = ActionServer(
-            self,
-            GoToPose,  # Action type
-            'GoToPose',  # Action name
+            self, GoToPose, 'go_to_pose',
+            execute_callback=self.execute_callback,
             callback_group=self.callback_group,
-            goal_callback=self.goal_callback,  # Callback when a goal is received
-            execute_callback=self.execute_callback  # Callback to execute the goal
-        )
-
-    # Callback to handle incoming goals
-    def goal_callback(self, goal_request: GoToPose.Goal):
-        self.get_logger().info('Received a goal...')
-        # Check if the absolute values of x and y are less than or equal to 11
-        if abs(goal_request.desired_x_pos) <= 11 and abs(goal_request.desired_y_pos) <= 11:
-            self.get_logger().info(f"Goal accepted with x: {goal_request.desired_x_pos}, y: {goal_request.desired_y_pos}")
-            return GoalResponse.ACCEPT  # Accept the goal
-        else:
-            self.get_logger().info(f"Goal rejected with x: {goal_request.desired_x_pos}, y: {goal_request.desired_y_pos}")
-            return GoalResponse.REJECT  # Reject the goal
-
-    # Callback to execute the goal
-    def execute_callback(self, goal_handle: ServerGoalHandle):
-        self.get_logger().info('Executing goal...')
-        self.goal_handle = goal_handle  # Store the goal handle
-
-        # Update desired position based on goal
-        self.desired_x = goal_handle.request.desired_x_pos
-        self.desired_y = goal_handle.request.desired_y_pos
+            goal_callback=self.goal_callback,
+            cancel_callback=self.cancel_callback)
         
-        # Reset PID variables for new goal
-        self.integral_dist = 0.0
-        self.previous_err_dist = 0.0
-        self.integral_theta = 0.0
-        self.previous_err_theta = 0.0
+        # State variables
+        self.current_pose = None
+        self.goal_handle = None
+        self.executing = False
 
-        # Subscribe to the pose topic to get feedback on turtle's position
-        self.my_pose_sub = self.create_subscription(
-            Pose, "/turtle1/pose", self.pose_callback, 10, callback_group=self.callback_group)
+    def goal_callback(self, goal_request):
+        """Accept or reject incoming goals."""
+        self.get_logger().info(f"Received goal: ({goal_request.desired_x_pos:.2f}, {goal_request.desired_y_pos:.2f})")
+        return GoalResponse.ACCEPT
 
-        # Initialize result object for the action
-        self.result = GoToPose.Result()
+    def cancel_callback(self, goal_handle):
+        """Handle goal cancellation."""
+        self.get_logger().info("Goal canceled")
+        self.executing = False
+        self.stop_turtle()
+        return CancelResponse.ACCEPT
 
+    def pose_callback(self, msg):
+        """Update current pose."""
+        self.current_pose = msg
+
+    def stop_turtle(self):
+        """Stop the turtle by sending zero velocities."""
+        twist = Twist()
+        self.cmd_vel_pub.publish(twist)
+
+    def execute_callback(self, goal_handle):
+        """Execute the goal using simple PID control."""
+        self.goal_handle = goal_handle
+        self.executing = True
+        
+        target_x = goal_handle.request.desired_x_pos
+        target_y = goal_handle.request.desired_y_pos
+        
+        self.get_logger().info("Executing goal...")
+        
+        # PID constants
+        kp_linear = 1.5
+        kp_angular = 6.0
+        
+        # Control loop
+        rate = self.create_rate(10)  # 10 Hz
+        
         try:
-            # Create a periodic timer to check if the goal is reached (10Hz to prevent oscillations)
-            self.goal_timer = self.create_timer(0.1, self.check_goal_reached)
-
-            # Spin the node to handle other callbacks while the goal is active
-            while not self.goal_handle.is_cancel_requested:
-                rclpy.spin_once(self, timeout_sec=0.1)
-                if self.goal_completed:  # Exit if goal is completed
-                    break
-
-        except Exception as e:
-            # Handle exceptions during goal execution
-            self.get_logger().error(f"Error during goal execution: {e}")
-            try:
-                if hasattr(self, 'goal_handle') and self.goal_handle is not None:
-                    self.goal_handle.abort()  # Abort the goal
-            except Exception as abort_error:
-                self.get_logger().error(f"Failed to abort goal: {abort_error}")
-            self.result.success = False
-            if hasattr(self, 'goal_timer'):
-                self.goal_timer.cancel()
-
-        # Return the result object
-        return self.result
-
-    # Periodic callback to check if the goal is reached
-    def check_goal_reached(self):
-        # Only check if goal is still active (not aborted or cancelled)
-        if hasattr(self, 'goal_handle') and self.goal_handle is not None:
-            # Check if goal was cancelled or aborted externally
-            if self.goal_handle.is_cancel_requested:
-                self.get_logger().info("Goal was cancelled")
-                self.goal_timer.cancel()
-                self.goal_completed = True
-                return
+            while self.executing and rclpy.ok():
+                if self.current_pose is None:
+                    continue
                 
-            # Check if the position and heading errors are within tolerances
-            if self.err_dist < 0.1 and abs(self.err_theta) < 0.08:
-                self.get_logger().info("Goal reached successfully!")
-                self.result.success = True
-                try:
-                    self.goal_handle.succeed()  # Mark the goal as succeeded
-                    self.goal_timer.cancel()  # Stop the periodic checks
-                    self.goal_completed = True
-                except Exception as e:
-                    self.get_logger().error(f"Failed to mark goal as succeeded: {e}")
-                    self.goal_timer.cancel()
-                    self.goal_completed = True
-            else:
-                self.get_logger().info("Still moving towards the goal...")
+                # Calculate errors
+                dx = target_x - self.current_pose.x
+                dy = target_y - self.current_pose.y
+                distance = math.sqrt(dx**2 + dy**2)
+                
+                target_angle = math.atan2(dy, dx)
+                angle_error = target_angle - self.current_pose.theta
+                
+                # Normalize angle error to [-pi, pi]
+                while angle_error > math.pi:
+                    angle_error -= 2 * math.pi
+                while angle_error < -math.pi:
+                    angle_error += 2 * math.pi
+                
+                # Check if goal is reached
+                if distance < 0.1 and abs(angle_error) < 0.1:
+                    self.get_logger().info("Goal reached!")
+                    self.stop_turtle()
+                    
+                    # Create result
+                    result = GoToPose.Result()
+                    result.success = True
+                    goal_handle.succeed()
+                    self.executing = False
+                    return result
+                
+                # Publish feedback
+                feedback = GoToPose.Feedback()
+                feedback.current_x_pos = self.current_pose.x
+                feedback.current_y_pos = self.current_pose.y
+                goal_handle.publish_feedback(feedback)
+                
+                # Calculate control commands
+                twist = Twist()
+                
+                # Linear velocity (proportional to distance)
+                twist.linear.x = kp_linear * distance
+                
+                # Angular velocity (proportional to angle error)
+                twist.angular.z = kp_angular * angle_error
+                
+                # Apply velocity limits
+                twist.linear.x = max(-2.0, min(2.0, twist.linear.x))
+                twist.angular.z = max(-2.0, min(2.0, twist.angular.z))
+                
+                # Publish velocity command
+                self.cmd_vel_pub.publish(twist)
+                
+                # Sleep to maintain loop rate
+                rate.sleep()
+                
+        except Exception as e:
+            self.get_logger().error(f"Error during goal execution: {e}")
+            self.stop_turtle()
+            goal_handle.abort()
+            self.executing = False
+            result = GoToPose.Result()
+            result.success = False
+            return result
+        finally:
+            self.stop_turtle()
+            self.executing = False
+            self.goal_handle = None
 
-    # Callback to process turtle's pose and compute control commands
-    def pose_callback(self, msg: Pose):
-        # Publish feedback for the action
-        Feedback = GoToPose.Feedback()
-        Feedback.current_x_pos = msg.x
-        Feedback.current_y_pos = msg.y
-        self.goal_handle.publish_feedback(Feedback)
 
-        # Calculate positional errors
-        err_x = self.desired_x - msg.x
-        err_y = self.desired_y - msg.y
-        self.err_dist = math.sqrt(err_x**2 + err_y**2)
-
-        # Calculate heading error
-        desired_theta = math.atan2(err_y, err_x)
-        self.err_theta = desired_theta - msg.theta
-
-        # Wrap heading error within [-pi, pi]
-        while self.err_theta > math.pi:
-            self.err_theta -= 2.0 * math.pi
-        while self.err_theta < -math.pi:
-            self.err_theta += 2.0 * math.pi
-        
-        # PID gains for distance and heading control
-        # ----------------------------------------------
-        # Fast angular control to match linear speed - turtle can turn quickly to target
-        Kp_dist, Ki_dist, Kd_dist = 1.5, 0.05, 0.005    # Distance control (moderate)
-        Kp_theta, Ki_theta, Kd_theta = 6.0, 0.08, 0.02   # Angular control (MUCH faster)
-        # ----------------------------------------------
-
-        # Update PID integral and derivative terms using instance variables
-        self.integral_dist += self.err_dist
-        derivative_dist = self.err_dist - self.previous_err_dist
-        self.integral_theta += self.err_theta
-        derivative_theta = self.err_theta - self.previous_err_theta
-        
-        # Integral windup protection (clamp integral terms)
-        max_integral_dist = 2.0  # Limit integral contribution
-        max_integral_theta = 1.0
-        self.integral_dist = max(-max_integral_dist, min(max_integral_dist, self.integral_dist))
-        self.integral_theta = max(-max_integral_theta, min(max_integral_theta, self.integral_theta))
-
-        # PID control for linear velocity
-        if self.err_dist >= 0.1:
-            l_v = Kp_dist * abs(self.err_dist) + Ki_dist * self.integral_dist + Kd_dist * derivative_dist
-            self.previous_err_dist = self.err_dist
-        else:
-            self.get_logger().info(f"Turtlesim stopping as goal distance is within tolerance")
-            l_v = 0.0
-
-        # PID control for angular velocity
-        if abs(self.err_theta) >= 0.08:
-            a_v = Kp_theta * self.err_theta + Ki_theta * self.integral_theta + Kd_theta * derivative_theta
-            self.previous_err_theta = self.err_theta
-        else:
-            self.get_logger().info(f"Turtlesim stopping as goal heading is within tolerance")
-            a_v = 0.0
-
-        # Send computed velocity commands
-        self.my_velocity_cont(l_v, a_v)
-
-    # Publish velocity commands to the topic
-    def my_velocity_cont(self, l_v, a_v):
-        my_msg = Twist()
-        my_msg.linear.x = l_v  # Linear velocity
-        my_msg.angular.z = a_v  # Angular velocity
-        self.my_vel_command.publish(my_msg)  # Publish the message
-
-# Entry point of the script
 def main(args=None):
-    rclpy.init(args=args)  # Initialize ROS 2
-    node = Controller_Node()  # Create an instance of the node
-    rclpy.spin(node)  # Keep the node running
-    node.destroy_node()  # Destroy the node when done
-    rclpy.shutdown()  # Shutdown ROS 2
+    """Main function to run the turtle controller node."""
+    rclpy.init(args=args)
+    
+    # Create the node with MultiThreadedExecutor for proper concurrency
+    node = Controller_Node()
+    executor = MultiThreadedExecutor()
+    
+    try:
+        rclpy.spin(node, executor=executor)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
-# Run the script
+
 if __name__ == '__main__':
     main()
-
