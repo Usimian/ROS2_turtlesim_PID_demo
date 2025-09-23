@@ -17,9 +17,7 @@ Usage:
     # Terminal 2: Start rosbridge (in a separate terminal)
     ros2 launch rosbridge_server rosbridge_websocket_launch.xml
     
-    # Terminal 3: Start MCP server
-    cd /path/to/ros-mcp-server
-    python -m ros_mcp_server --robot-spec utils/robot_specifications/Yahboomcar.yaml
+    ros-mcp-server is launched from LMStudio
 """
 
 from launch import LaunchDescription
