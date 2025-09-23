@@ -1,0 +1,17 @@
+#Goal
+float64 target_angle     # target angle in radians
+float64 angular_speed    # angular speed limit (rad/s, default: 1.0)
+float64 tolerance        # angular tolerance (rad, default: 0.1)
+bool relative            # true for relative rotation, false for absolute
+---
+#Result
+bool success
+float64 final_angle      # final angle achieved
+float64 rotation_amount  # actual rotation performed
+float64 execution_time   # time taken
+string message
+---
+#Feedback
+float64 current_angle    # current angle
+float64 remaining_angle  # remaining rotation needed
+float64 angular_velocity # current angular velocity

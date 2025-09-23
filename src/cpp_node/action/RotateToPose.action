@@ -1,0 +1,17 @@
+# RotateToPose.action - Action for rotating turtle to a specific angle
+# Goal
+float64 desired_angle     # Target angle in radians
+float64 max_angular_speed # Maximum angular velocity (rad/s)
+bool relative            # If true, rotate relative to current angle; if false, absolute angle
+---
+# Result  
+bool success             # Whether the rotation was successful
+float64 final_angle      # Final angle after rotation (radians)
+float64 angular_distance # Total angular distance rotated (radians)
+float64 execution_time   # Time taken to complete rotation (seconds)
+string message          # Status message
+---
+# Feedback
+float64 current_angle    # Current angle (radians)  
+float64 remaining_angle  # Remaining angular distance to target (radians)
+float64 angular_velocity # Current angular velocity (rad/s)

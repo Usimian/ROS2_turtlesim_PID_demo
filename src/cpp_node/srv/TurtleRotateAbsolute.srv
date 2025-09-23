@@ -1,0 +1,11 @@
+# Request - Rotate to absolute angle
+float64 target_angle   # target angle in radians (0 = east, pi/2 = north, etc.)
+float64 angular_speed  # optional angular speed (default: 1.0 rad/s)
+float64 tolerance     # optional tolerance (default: 0.1 rad)
+---
+# Response
+bool success
+string message
+float64 final_heading
+float64 rotation_amount
+float64 execution_time

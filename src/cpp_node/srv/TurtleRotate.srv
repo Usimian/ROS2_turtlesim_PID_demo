@@ -1,0 +1,11 @@
+# Request
+float64 angle          # angle to rotate in radians (+ counterclockwise, - clockwise)
+float64 angular_speed   # optional angular speed (default: 1.0 rad/s)
+float64 tolerance      # optional tolerance (default: 0.1 rad)
+---
+# Response
+bool success
+string message
+float64 final_heading
+float64 actual_rotation
+float64 execution_time

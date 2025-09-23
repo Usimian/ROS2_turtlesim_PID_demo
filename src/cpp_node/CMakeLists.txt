@@ -22,6 +22,13 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/GoToPose.action"
+  "action/RotateToPose.action"
+  "srv/TurtleDistanceCommand.srv"
+  "srv/TurtlePositionCommand.srv"
+  "srv/TurtleStatus.srv"
+  "srv/TurtleRotateRelative.srv"
+  "srv/TurtleRotateAbsolute.srv"
+  DEPENDENCIES geometry_msgs
 )
 
 if(BUILD_TESTING)
